@@ -1,79 +1,62 @@
 package com.arthur.projeto2.controller;
 
-import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 
-import com.arthur.projeto2.dao.ProdutoDao;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+
 import com.arthur.projeto2.model.ProdutoModel;
+import com.arthur.projeto2.repository.ProdutoRepository;
 
-import jakarta.servlet.ServletException;
-import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
-@WebServlet("/produtos")
-public class ProdutoController extends HttpServlet {
+@Controller
+@RequestMapping("/produtos")
+public class ProdutoController {
 
-    private final ProdutoDao dao = new ProdutoDao();
+    private final ProdutoRepository repository;
 
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        try {
-            String action = request.getParameter("action");
-            action = (action == null) ? "listar" : action;
+    public ProdutoController(ProdutoRepository repository) {
+        this.repository = repository;
+    }
 
-            switch (action) {
-                case "novo":
-                    request.getRequestDispatcher("produto-form.jsp").forward(request, response);
-                    break;
+    @GetMapping
+    public String handleGet(@RequestParam(defaultValue = "listar") String action,
+            @RequestParam(required = false) Integer id, HttpServletRequest request) {
 
-                case "editar":
-                    int id = Integer.parseInt(request.getParameter("id"));
-                    ProdutoModel produto = dao.buscarPorId(id);
-                    request.setAttribute("produto", produto);
-                    request.getRequestDispatcher("produto-form.jsp").forward(request, response);
-                    break;
+        switch (action) {
+            case "novo":
+                return "produto-form";
 
-                case "excluir":
-                    dao.deletar(Integer.parseInt(request.getParameter("id")));
-                    response.sendRedirect("produtos");
-                    break;
+            case "editar":
+                ProdutoModel produto = repository.findById(id).orElse(null);
+                request.setAttribute("produto", produto);
+                return "produto-form";
 
-                default:
-                    List<ProdutoModel> produtos = dao.listarTodos();
-                    request.setAttribute("produtos", produtos);
-                    request.getRequestDispatcher("produtos.jsp").forward(request, response);
-            }
-        } catch (SQLException e) {
-            throw new ServletException("Erro ao processar produto", e);
+            case "excluir":
+                repository.deleteById(id);
+                return "redirect:produtos";
+
+            default:
+                List<ProdutoModel> produtos = repository.findAll();
+                request.setAttribute("produtos", produtos);
+                return "produtos";
         }
     }
 
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        try {
-            request.setCharacterEncoding("UTF-8");
+    @PostMapping
+    public String salvar(@RequestParam(required = false) Integer id, @RequestParam String nome,
+            @RequestParam double preco, @RequestParam int quantidade) {
 
-            String idParam = request.getParameter("id");
-            String nome = request.getParameter("nome");
-            double preco = Double.parseDouble(request.getParameter("preco"));
-            int quantidade = Integer.parseInt(request.getParameter("quantidade"));
-
-            if (idParam == null || idParam.isEmpty()) {
-                ProdutoModel produto = new ProdutoModel(nome, preco, quantidade);
-                dao.salvar(produto);
-            } else {
-                ProdutoModel produto = new ProdutoModel(Integer.parseInt(idParam), nome, preco, quantidade);
-                dao.atualizar(produto);
-            }
-
-            response.sendRedirect("produtos");
-        } catch (SQLException e) {
-            throw new ServletException("Erro ao salvar produto", e);
+        if (id == null) {
+            repository.save(new ProdutoModel(nome, preco, quantidade));
+        } else {
+            repository.save(new ProdutoModel(id, nome, preco, quantidade));
         }
+
+        return "redirect:produtos";
     }
 }

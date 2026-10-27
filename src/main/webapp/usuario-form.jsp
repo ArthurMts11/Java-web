@@ -14,6 +14,7 @@
     <h2><%= (usuario == null) ? "Novo usuário" : "Editar usuário" %></h2>
 
     <form action="usuarios" method="post">
+        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}">
         <% if (usuario != null) { %>
             <input type="hidden" name="id" value="<%= usuario.getId() %>">
         <% } %>

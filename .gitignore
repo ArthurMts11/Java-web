@@ -7,3 +7,13 @@ target/
 .settings/
 .project
 .classpath
+uploads/
+
+# Variáveis de ambiente locais (JWT_SECRET, MAIL_PASSWORD...)
+.env
+
+# Ferramentas locais e arquivos de entrega
+.claude/
+.playwright-mcp/
+.postman/
+*.zip

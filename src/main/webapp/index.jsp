@@ -9,6 +9,7 @@
     <h2>Enviar mensagem</h2>
 
     <form action="saudacao" method="post">
+        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}">
         <label for="nome">Seu nome:</label>
         <input type="text" id="nome" name="nome" placeholder="Ex: Arthur" required>
         <br><br>

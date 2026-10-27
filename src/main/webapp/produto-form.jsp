@@ -14,6 +14,7 @@
     <h2><%= (produto == null) ? "Novo produto" : "Editar produto" %></h2>
 
     <form action="produtos" method="post">
+        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}">
         <% if (produto != null) { %>
             <input type="hidden" name="id" value="<%= produto.getId() %>">
         <% } %>

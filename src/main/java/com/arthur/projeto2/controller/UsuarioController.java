@@ -1,96 +1,113 @@
 package com.arthur.projeto2.controller;
 
-import java.io.IOException;
-import java.sql.SQLException;
 import java.util.List;
 
-import com.arthur.projeto2.dao.UsuarioDao;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
+
 import com.arthur.projeto2.model.UsuarioModel;
-import com.arthur.projeto2.util.SenhaUtil;
+import com.arthur.projeto2.repository.UsuarioRepository;
 
-import jakarta.servlet.ServletException;
-import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 
-@WebServlet("/usuarios")
-public class UsuarioController extends HttpServlet {
+@Controller
+@RequestMapping("/usuarios")
+public class UsuarioController {
 
-    private final UsuarioDao dao = new UsuarioDao();
+    private final UsuarioRepository repository;
+    private final PasswordEncoder passwordEncoder;
 
-    @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        try {
-            String action = request.getParameter("action");
-            action = (action == null) ? "listar" : action;
+    public UsuarioController(UsuarioRepository repository, PasswordEncoder passwordEncoder) {
+        this.repository = repository;
+        this.passwordEncoder = passwordEncoder;
+    }
 
-            switch (action) {
-                case "novo":
-                    request.getRequestDispatcher("usuario-form.jsp").forward(request, response);
-                    break;
+    @GetMapping
+    public String handleGet(@RequestParam(defaultValue = "listar") String action,
+            @RequestParam(required = false) Integer id, HttpServletRequest request) {
 
-                case "editar":
-                    int id = Integer.parseInt(request.getParameter("id"));
-                    UsuarioModel usuario = dao.buscarPorId(id);
-                    request.setAttribute("usuario", usuario);
-                    request.getRequestDispatcher("usuario-form.jsp").forward(request, response);
-                    break;
+        switch (action) {
+            case "novo":
+                return "usuario-form";
 
-                case "excluir":
-                    dao.deletar(Integer.parseInt(request.getParameter("id")));
-                    response.sendRedirect("usuarios");
-                    break;
+            case "editar":
+                UsuarioModel usuario = repository.findById(id).orElse(null);
+                request.setAttribute("usuario", usuario);
+                return "usuario-form";
 
-                default:
-                    List<UsuarioModel> usuarios = dao.listarTodos();
-                    request.setAttribute("usuarios", usuarios);
-                    request.getRequestDispatcher("usuarios.jsp").forward(request, response);
-            }
-        } catch (SQLException e) {
-            throw new ServletException("Erro ao processar usuário", e);
+            case "excluir":
+                repository.deleteById(id);
+                return "redirect:usuarios";
+
+            default:
+                List<UsuarioModel> usuarios = repository.findAll();
+                request.setAttribute("usuarios", usuarios);
+                return "usuarios";
         }
     }
 
-    @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response)
-            throws ServletException, IOException {
-        try {
-            request.setCharacterEncoding("UTF-8");
+    // Formulário do JSP (registrar.jsp / usuario-form.jsp): x-www-form-urlencoded.
+    @PostMapping(consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    public String salvar(@RequestParam(required = false) Integer id, @RequestParam String nome,
+            @RequestParam String email, @RequestParam(required = false) String senha) {
 
-            String idParam = request.getParameter("id");
-            String nome = request.getParameter("nome");
-            String email = request.getParameter("email");
-            String senha = request.getParameter("senha"); // senha que veio do formulário
+        if (id == null) {
+            UsuarioModel usuario = new UsuarioModel();
+            usuario.setNome(nome);
+            usuario.setEmail(email);
+            usuario.setSenha(passwordEncoder.encode(senha));
+            repository.save(usuario);
 
-            if (idParam == null || idParam.isEmpty()) {
-                String senhaCriptografada = SenhaUtil.hashSenha(senha);
-                UsuarioModel usuario = new UsuarioModel(nome, email, senhaCriptografada);
-                dao.salvar(usuario);
-
-                // Cadastro público (registrar.jsp): manda o novo usuário fazer login.
-                response.sendRedirect("login.jsp");
-            } else {
-                int id = Integer.parseInt(idParam);
-
-                // Campo de senha em branco na edição = mantém a senha atual (já criptografada).
-                String senhaCriptografada;
-                if (senha == null || senha.isEmpty()) {
-                    UsuarioModel existente = dao.buscarPorId(id);
-                    senhaCriptografada = existente.getSenha();
-                } else {
-                    senhaCriptografada = SenhaUtil.hashSenha(senha);
-                }
-
-                UsuarioModel usuario = new UsuarioModel(id, nome, email, senhaCriptografada);
-                dao.atualizar(usuario);
-
-                // Edição via CRUD administrativo: volta para a listagem.
-                response.sendRedirect("usuarios");
-            }
-        } catch (SQLException e) {
-            throw new ServletException("Erro ao salvar usuário", e);
+            // Cadastro público (registrar.jsp): manda o novo usuário fazer login.
+            return "redirect:login.jsp";
         }
+
+        // Edita a entidade existente (em vez de reconstruir uma nova) para não
+        // perder campos que não vêm do formulário, como "tipo".
+        UsuarioModel usuario = repository.findById(id).orElseThrow();
+        usuario.setNome(nome);
+        usuario.setEmail(email);
+
+        // Campo de senha em branco na edição = mantém a senha atual (já criptografada).
+        if (senha != null && !senha.isEmpty()) {
+            usuario.setSenha(passwordEncoder.encode(senha));
+        }
+
+        repository.save(usuario);
+
+        // Edição via CRUD administrativo: volta para a listagem.
+        return "redirect:usuarios";
+    }
+
+    // Mesma rota, para clientes JSON (Thunder Client, Postman, etc.). Sempre
+    // cria um usuário novo. Usa um DTO em vez da entidade direto no corpo:
+    // evita a ambiguidade de construtor do Lombok com o Jackson e impede que
+    // o cliente mande "id"/"tipo" e sobrescreva algo que não devia.
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseBody
+    public ResponseEntity<UsuarioModel> salvarViaJson(@RequestBody NovoUsuarioJson dados) {
+        UsuarioModel usuario = new UsuarioModel();
+        usuario.setNome(dados.nome());
+        usuario.setEmail(dados.email());
+        usuario.setSenha(passwordEncoder.encode(dados.senha()));
+
+        UsuarioModel salvo = repository.save(usuario);
+
+        // Não devolve o hash da senha na resposta.
+        salvo.setSenha(null);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(salvo);
+    }
+
+    public record NovoUsuarioJson(String nome, String email, String senha) {
     }
 }

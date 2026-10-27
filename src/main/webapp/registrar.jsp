@@ -9,6 +9,7 @@
     <h2>Cadastro</h2>
 
     <form action="usuarios" method="post">
+        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}">
         <div>
             Nome: <input type="text" id="nome" name="nome" required>
         </div>

@@ -13,6 +13,7 @@
     <% } %>
 
     <form action="login" method="post">
+        <input type="hidden" name="${_csrf.parameterName}" value="${_csrf.token}">
         <div>
             E-mail: <input type="email" id="email" name="email" required>
         </div>
